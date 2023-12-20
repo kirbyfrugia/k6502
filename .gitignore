@@ -1,0 +1,7 @@
+/tmp
+/faulty-eeprom
+*.swp
+a.out
+rom.bin
+out.txt
+*~
