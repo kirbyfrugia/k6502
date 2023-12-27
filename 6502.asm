@@ -157,6 +157,14 @@ LCD_TOP_ROW_START_ADDR = $00       ;0 bytes, lcd address of row 1, start
 LCD_TOP_ROW_END_ADDR   = $27       ;0 bytes, lcd address of row 1, end
 LCD_DISPF_NOSHIFT      = %00000001 ;0 bytes, don't shift display when moving or printing
 
+; xmodem chars
+XMODEM_SOH = $01
+XMODEM_EOT = $04
+XMODEM_ACK = $06
+XMODEM_NAK = $15
+XMODEM_SYN = $16
+XMODEM_CAN = $18
+
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ; non-maskable interrupt handler
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -292,6 +300,8 @@ reset:
   STA hexit
   STA mon_tmp_lo
   STA mon_tmp_hi
+  STA mon_mem_lo
+  STA mon_mem_hi
   STA start_index
   STA end_index
   STA acia_cmd
@@ -1244,6 +1254,8 @@ handle_mon_prev:
   BCS handle_mon_np_dump
   DEC mon_mem_hi
   JMP handle_mon_np_dump
+handle_mon_dot:
+  PHA
 handle_mon_np_dump:
   JSR add_screen_buf_row
   LDY #0
@@ -1321,6 +1333,8 @@ exec_cmd_DOLLAR:
   BEQ exec_cmd_DOLLAR_P
   CMP #'p'
   BEQ exec_cmd_DOLLAR_P
+  CMP #'.'
+  BEQ exec_cmd_DOLLAR_DOT
 
   JSR handle_mon_mem
   JMP exec_cmd_done
@@ -1329,6 +1343,9 @@ exec_cmd_DOLLAR_N:
   JMP exec_cmd_done
 exec_cmd_DOLLAR_P:
   JSR handle_mon_prev
+  JMP exec_cmd_done
+exec_cmd_DOLLAR_DOT:
+  JSR handle_mon_dot
   JMP exec_cmd_done
 exec_cmd_syntax_error:
   JSR syntax_error
