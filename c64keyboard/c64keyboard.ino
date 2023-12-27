@@ -260,7 +260,7 @@ byte scanColumn(byte column) {
   return rows;
 }
 
-void printColumn(byte column, byte rowBits) {
+void printColumnAndDelay(byte column, byte rowBits) {
   byte columnBits = 255 - pow(2, column);
   Serial.print(column);
   Serial.print(": ");
@@ -277,7 +277,7 @@ void printColumn(byte column, byte rowBits) {
 void scanKeys() {
   for (int i = 0; i < 8; ++i) {
     byte rows = scanColumn(i);
-    //printColumn(i, rows);
+    //printColumnAndDelay(i, rows);
   }
   //Serial.println("-------------------");
 }

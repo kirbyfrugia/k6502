@@ -14,14 +14,23 @@
 ; UART/ACIA         $4800-$4803
 ; VIA2 (6522)       $5000-$500f
 ; VIA1 (6522)       $6000-$600f
-
+;
 ; OUTPUT
 ; There are two VIA chips (VIA1, VIA2 above).
 ; There are also two shift registers that are wired
 ; up to via1_portb.
 ;  sr1 - used to send instructions to the lcd
 ;  sr2 - unused
-
+;
+; KEYBOARD BUFFER
+;
+; The keyboard buffer is used to buffer keys that were typed in from
+; the keyboard. It consists of a set of alternating bytes. The first
+; byte is the actual key that was pressed. The second byte contains
+; the control flags (shift, ctrl, c=, etc) with an 1 bit meaning
+; that ctrl flag is currently set. E.g. if left shift is pressed down,
+; the left shift bit will be set to 1.
+;
 ; SCREEN BUFFER
 ; Each time a new row is added to the buffer, the head of the buffer
 ; moves down by 40 characters in memory. When it gets to zero, it wraps around.
@@ -70,14 +79,19 @@ ROW_LENGTH      = 40 ; must be a factor of 2
 LCD_SCREEN_WIDTH = 16 ; number of chars on the lcd screen
 
 ; keyboard flags
-KBF_RELEASE = %00000001 ; flag to ignore next scancode
-KBF_LSHIFT  = %00000010 ; left shift key pressed
-KBF_RSHIFT  = %00000100 ; right shift key pressed
+KBF_RELEASING     = %00000001 ; flag to ignore next scancode
+KBF_LSHIFT        = %00000010 ; left shift key pressed
+KBF_RSHIFT        = %00000100 ; right shift key pressed
+KBF_RELEASING_INV = %11111110 ; flag to ignore next scancode, inverse
+KBF_LSHIFT_INV    = %11111101 ; left shift key pressed, inverse
+KBF_RSHIFT_INV    = %11111011 ; right shift key pressed, inverse
 
 ; keyboard scancodes
 KBSC_RELEASE    = $f0 ; keyboard scancode - release
 KBSC_RETURN     = $5a ; keyboard scancode - return
 KBSC_LR_CURSORS = $0c ; keyboard scancode - left/right cursor
+KBSC_LSHIFT     = $12 ; keyboard scancode - left shift
+KBSC_RSHIFT     = $59 ; keyboard scancode - right shift
 
 ; variables stored at specific memory locations
 ticks                     = $00 ;4 bytes, number of interrupts, each tick is 10ms
@@ -174,49 +188,69 @@ irq_ticks:
 ; to ignore the next key.
 irq_kb:
   LDA kb_flags_i
-  AND #KBF_RELEASE     ; is this key one that is being released?
-  BEQ irq_read_key     ; otherwise, read key
+  AND #KBF_RELEASING
+  BNE irq_kb_key_released ; deal with key that was released
 
-  LDA kb_flags_i
-  EOR #KBF_RELEASE     ; flip releasing bit
-  STA kb_flags_i
-
-  ; if here, we are dealing with a key that has been
-  ; released. via2_porta contains the key that was released
-
-  ; we deal with the shift keys being released in a bit
-  ; of a hacky way to keep the interrupt handler a bit
-  ; faster and keep most of the keyboard logic in the
-  ; main loop and in one spot.
-  ; we use some scancodes that don't exist on the c64
-  ; keyboard as shift-up keys
-  LDA via2_porta           ; read to clear the interrupt and get value
-  CMP #$12            ; left shift
-  BEQ irq_lshift_up
-  CMP #$59
-  BEQ irq_rshift_up
-  JMP irq_done
-irq_lshift_up:
-  LDA #$58
-  JMP irq_buffer_key
-irq_rshift_up:
-  LDA #$77
-  JMP irq_buffer_key
-irq_read_key:
-  LDA via2_porta           ; read to clear the interrupt and get value
+  ; if here, new key is being pressed
+  LDA via2_porta         ; read to clear the interrupt and get value
   CMP #KBSC_RELEASE
-  BEQ irq_key_release ; process release scancode
-irq_buffer_key:
-  ; put the scan code into the keyboard buffer
+  BEQ irq_kb_sc_release
+  CMP #KBSC_LSHIFT
+  BEQ irq_kb_sc_lshift
+  CMP #KBSC_RSHIFT
+  BEQ irq_kb_sc_rshift
+
+  ; if here, this is a non-special character
+
+  ; first store the scan code in the keyboard buffer
   LDX kb_wptr
   STA kb_buf, x
   INC kb_wptr
+
+  ; now store the flags in the kb buffer
+  INX
+  LDA kb_flags_i
+  STA kb_buf, x
+  INC kb_wptr
   JMP irq_done
-irq_key_release:
+irq_kb_sc_release:
   ; set a flag that the next scancode should be ignored
   LDA kb_flags_i
-  ORA #KBF_RELEASE
+  ORA #KBF_RELEASING
   STA kb_flags_i
+  JMP irq_done
+irq_kb_sc_lshift:
+  LDA kb_flags_i
+  ORA #KBF_LSHIFT
+  STA kb_flags_i
+  JMP irq_done
+irq_kb_sc_rshift:
+  LDA kb_flags_i
+  ORA #KBF_RSHIFT
+  STA kb_flags_i
+  JMP irq_done
+irq_kb_key_released:
+  ; if here, we're processing a key that was released
+  LDA kb_flags_i
+  AND #KBF_RELEASING_INV ; flip releasing bit back off
+  STA kb_flags_i
+
+  LDA via2_porta      ; read to clear the interrupt and get value
+  CMP #KBSC_LSHIFT
+  BEQ irq_kb_lshift_up
+  CMP #KBSC_RSHIFT
+  BEQ irq_kb_rshift_up
+  JMP irq_done
+irq_kb_lshift_up:
+  LDA kb_flags_i
+  AND #KBF_LSHIFT_INV
+  STA kb_flags_i
+  JMP irq_done
+irq_kb_rshift_up:
+  LDA kb_flags_i
+  AND #KBF_RSHIFT_INV
+  STA kb_flags_i
+  JMP irq_done
 irq_done:
   PLA
   TAX
@@ -1425,64 +1459,34 @@ updkb:
   CMP kb_wptr
   CLI
   BNE updkb_process_key
-
   JMP updkb_done
-
 updkb_process_key:
+  ; read control flags
   LDX kb_rptr
+  LDA kb_buf+1,x
+  STA kb_flags_k
+
+  ; read scancode
   LDA kb_buf, x
-
-  ; this subroutine is long, so BEQ couldn't reach
-  ; some destinations. hence the ugly code
-updkb_lshift_down_test:
-  CMP #$12
-  BNE updkb_rshift_down_test
-  JMP updkb_lshift_down
-updkb_rshift_down_test:
-  CMP #$59
-  BNE updkb_lshift_up_test
-  JMP updkb_rshift_down
-updkb_lshift_up_test:
-  CMP #$58
-  BNE updkb_rshift_up_test
-  JMP updkb_lshift_up
-updkb_rshift_up_test:
-  CMP #$77
-  BNE updkb_cursor_leftright_test
-  JMP updkb_rshift_up
-updkb_cursor_leftright_test:
   CMP #$0c
-  BNE updkb_cursor_updown_test
-  JMP updkb_cursor_leftright
-updkb_cursor_updown_test:
+  BEQ updkb_cursor_leftright
   CMP #$07
-  BNE updkb_backspace_test
-  JMP updkb_cursor_updown
-updkb_backspace_test:
+  BEQ updkb_cursor_updown
   CMP #$66
-  BNE updkb_return_test
-  JMP updkb_backspace
-updkb_return_test:
+  BEQ updkb_backspace
   CMP #$5a
-  BNE updkb_clear_home_test
-  JMP updkb_return
-updkb_clear_home_test:
+  BEQ updkb_return
   CMP #$0b
-  BNE updkb_runstop_test
-  JMP updkb_home
-updkb_runstop_test:
+  BEQ updkb_home
   CMP #$7e
-  BNE updkb_print_key
-  JMP updkb_runstop
-updkb_print_key:
-  ; if here, we're dealing with a key we want to print
+  BEQ updkb_runstop
 
+  ; if here, we're dealing with a key we want to print
   TAX ; move scancode to x register
   LDA kb_flags_k
   AND #(KBF_LSHIFT | KBF_RSHIFT)
   BNE updkb_shifted_key
-  JMP updkb_unshifted_key
-updkb_unshifted_key:
+
   LDA keymap, x         ; map to character code
   JMP updkb_print
 updkb_shifted_key:
@@ -1491,13 +1495,11 @@ updkb_print:
   STA ascii_char_typed
   JSR cursor_row_store_char
   JSR cursor_row_print_char
-  JSR tx_data_rs232
   JMP updkb_scancode_done
 updkb_cursor_leftright:
   LDA kb_flags_k
   AND #(KBF_LSHIFT | KBF_RSHIFT)
   BNE updkb_move_cursor_left
-
   JSR move_cursor_right
   JMP updkb_scancode_done
 updkb_move_cursor_left:
@@ -1507,43 +1509,15 @@ updkb_cursor_updown:
   LDA kb_flags_k
   AND #(KBF_LSHIFT | KBF_RSHIFT)
   BNE updkb_move_cursor_up
-
   JSR move_cursor_down
   JMP updkb_scancode_done
 updkb_move_cursor_up:
   JSR move_cursor_up
   JMP updkb_scancode_done
-
-updkb_scancode_done:
-  ; processed scancode, let's see if there are more
-  INC kb_rptr
-  JMP updkb
-
-updkb_lshift_up:
-  LDA kb_flags_k
-  EOR #KBF_LSHIFT
-  STA kb_flags_k
-  JMP updkb_scancode_done
-updkb_rshift_up:
-  LDA kb_flags_k
-  EOR #KBF_RSHIFT
-  STA kb_flags_k
-  JMP updkb_scancode_done
-updkb_lshift_down:
-  LDA kb_flags_k
-  ORA #KBF_LSHIFT
-  STA kb_flags_k
-  JMP updkb_scancode_done
-updkb_rshift_down:
-  LDA kb_flags_k
-  ORA #KBF_RSHIFT
-  STA kb_flags_k
-  JMP updkb_scancode_done
 updkb_backspace:
   LDA kb_flags_k
   AND #(KBF_LSHIFT | KBF_RSHIFT)
   BNE updkb_insert
-
   JSR backspace
   JMP updkb_scancode_done
 updkb_insert:
@@ -1564,10 +1538,13 @@ updkb_clear_home:
 updkb_runstop:
   JSR runstop
   JMP updkb_scancode_done
+updkb_scancode_done:
+  ; processed scancode, let's see if there are more
+  INC kb_rptr
+  INC kb_rptr
+  JMP updkb
 updkb_done:
-  ; no more scancodes to process
   RTS
-
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
