@@ -338,71 +338,66 @@ reset:
 ; main loop
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 loop:
-  JSR rx_data
   JSR updkb
   JMP loop
   RTS
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ; sleeps the given amount of time
+; once timer has expired, 22 clock cycles pass, so timers less than
+; 22us don't make sense
+; the times for each sleep call are the number of microseconds - 22.
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-sleep_10us:
-  PHA
-  LDA #$0a
-  STA via1_t2cl
-  LDA #$00
-  STA via1_t2ch
-  JMP sleep_loop
 sleep_45us:
   PHA
-  LDA #$2d
+  LDA #$17
   STA via1_t2cl
   LDA #$00
   STA via1_t2ch
   JMP sleep_loop
 sleep_50us:
   PHA
-  LDA #$32
+  LDA #$1c
   STA via1_t2cl
   LDA #$00
   STA via1_t2ch
   JMP sleep_loop
 sleep_520us:
   PHA
-  LDA #$08
+  LDA #$f2
   STA via1_t2cl
-  LDA #$02
+  LDA #$01
   STA via1_t2ch
   JMP sleep_loop
 sleep_1ms:
   PHA
-  LDA #$e8
+  LDA #$d2
   STA via1_t2cl
   LDA #$03
   STA via1_t2ch
   JMP sleep_loop
 sleep_10ms:
   PHA
-  LDA #$10
+  LDA #$fa
   STA via1_t2cl
-  LDA #$27
+  LDA #$26
   STA via1_t2ch
   JMP sleep_loop
 sleep_50ms:
   PHA
-  LDA #$50
+  LDA #$3a
   STA via1_t2cl
   LDA #$c3
   STA via1_t2ch
   JMP sleep_loop
 sleep_loop:
-  LDA via1_ifr
-  AND #%00100000
-  BEQ sleep_loop
-  LDA via1_t2cl ; ack expired timer
+  LDA via1_ifr    ; 4 clock cycles
+  AND #%00100000  ; 2 clock cycles
+  BEQ sleep_loop  ; 2 clock cycles, branch not taken
+  LDA via1_t2cl ; ack expired timer, 4 clock cycles 
 sleep_done:
-  PLA
-  RTS
+  PLA ; 4 clock cycles
+  RTS ; 6 clock cycles
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
