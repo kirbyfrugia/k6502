@@ -95,51 +95,52 @@ KBSC_RSHIFT     = $59 ; keyboard scancode - right shift
 
 ; variables stored at specific memory locations
 ticks                     = $00 ;4 bytes, number of interrupts, each tick is 10ms
-screen_buf_ptr_lo         = $04 ;1 byte, ptr to current start of screen buffer, lo byte
-screen_buf_ptr_hi         = $05 ;1 byte, ptr to current start of screen buffer, hi byte
-screen_buf_ptr_tmp_lo     = $06 ;1 byte, tmp ptr used when finding screen buf locations
-screen_buf_ptr_tmp_hi     = $07 ;1 byte, tmp ptr used when finding screen buf locations
-screen_buf_cursor_row_lo  = $08 ;1 byte, mem location of the row that the cursor is on in screen buffer
-screen_buf_cursor_row_hi  = $09 ;1 byte, mem location of the row that the cursor is on in screen buffer
-screen_buf_bottom_row_lo  = $0a ;1 byte, mem location of the bottom row in screen buffer
-screen_buf_bottom_row_hi  = $0b ;1 byte, mem location of the bottom row in screen buffer
-screen_buf_top_row_lo     = $0c ;1 byte, mem location of the top row in screen buffer
-screen_buf_top_row_hi     = $0d ;1 byte, mem location of the top row in screen buffer
-input_buf_lo              = $0e ;1 byte, mem location of the row that contains the current user input
-input_buf_hi              = $0f ;1 byte, mem location of the row that contains the current user input
-display_offset            = $10 ;1 byte, offset of far left character on screen
-cursor_col_offset         = $11 ;1 byte, offset of lcd cursor from left side of screen
-cursor_tmp                = $12 ;1 byte, tmp var used by some cursor subroutines
-rows_scrolled_up          = $13 ;1 byte, how far up we've scrolled
-cursor_current_lcd_row    = $14 ;1 byte, the row on the lcd that the cursor is currently on
-cursor_row_start_addr     = $15 ;1 byte, lcd address of first character in current row
-zbb1                      = $16 ;1 byte, zero byte buffer var
-zbb2                      = $17 ;1 byte, zero byte buffer var
-zbb3                      = $18 ;1 byte, zero byte buffer var
-zbb4                      = $19 ;1 byte, zero byte buffer var
-kb_wptr                   = $1a ;1 byte, keyboard write pointer
-kb_rptr                   = $1b ;1 byte, keyboard read pointer
-kb_flags_i                = $1c ;1 byte, keyboard flags used by interrupt handler
-kb_flags_k                = $1d ;1 byte, keyboard flags used by keyboard processor
-ascii_char_typed          = $1e ;1 byte, ascii code of a character typed by a user
-output_data_sr1           = $1f ;1 byte, data to be sent to shift register 1
-output_data_sr2           = $20 ;1 byte, data to be sent to shift register 2
-shift_data_tmp            = $21 ;1 byte, tmp var for shift data subroutine
-display_flags             = $22 ;1 byte, flags used in display routines
-mon_mem_lo                = $23 ;1 byte, lo byte location used by the memory monitor
-mon_mem_hi                = $24 ;1 byte, hi byte location used by the memory monitor
+decimal_value             = $04 ;2 bytes, for use with printing numbers
+decimal_mod10             = $06 ;2 bytes, for use with printing numbers
+decimal_value_buf         = $08 ;6 bytes, buf to hold number for printing
+screen_buf_ptr_lo         = $0e ;1 byte, ptr to current start of screen buffer, lo byte
+screen_buf_ptr_hi         = $0f ;1 byte, ptr to current start of screen buffer, hi byte
+screen_buf_ptr_tmp_lo     = $10 ;1 byte, tmp ptr used when finding screen buf locations
+screen_buf_ptr_tmp_hi     = $11 ;1 byte, tmp ptr used when finding screen buf locations
+screen_buf_cursor_row_lo  = $12 ;1 byte, mem location of the row that the cursor is on in screen buffer
+screen_buf_cursor_row_hi  = $13 ;1 byte, mem location of the row that the cursor is on in screen buffer
+screen_buf_bottom_row_lo  = $14 ;1 byte, mem location of the bottom row in screen buffer
+screen_buf_bottom_row_hi  = $15 ;1 byte, mem location of the bottom row in screen buffer
+screen_buf_top_row_lo     = $16 ;1 byte, mem location of the top row in screen buffer
+screen_buf_top_row_hi     = $17 ;1 byte, mem location of the top row in screen buffer
+input_buf_lo              = $18 ;1 byte, mem location of the row that contains the current user input
+input_buf_hi              = $19 ;1 byte, mem location of the row that contains the current user input
+display_offset            = $1a ;1 byte, offset of far left character on screen
+cursor_col_offset         = $1b ;1 byte, offset of lcd cursor from left side of screen
+cursor_tmp                = $1c ;1 byte, tmp var used by some cursor subroutines
+rows_scrolled_up          = $1d ;1 byte, how far up we've scrolled
+cursor_current_lcd_row    = $1e ;1 byte, the row on the lcd that the cursor is currently on
+cursor_row_start_addr     = $1f ;1 byte, lcd address of first character in current row
+zbb1                      = $20 ;1 byte, zero byte buffer var
+zbb2                      = $21 ;1 byte, zero byte buffer var
+zbb3                      = $22 ;1 byte, zero byte buffer var
+zbb4                      = $23 ;1 byte, zero byte buffer var
+kb_wptr                   = $24 ;1 byte, keyboard write pointer
+kb_rptr                   = $25 ;1 byte, keyboard read pointer
+kb_flags_i                = $26 ;1 byte, keyboard flags used by interrupt handler
+kb_flags_k                = $27 ;1 byte, keyboard flags used by keyboard processor
+ascii_char_typed          = $28 ;1 byte, ascii code of a character typed by a user
+output_data_sr1           = $29 ;1 byte, data to be sent to shift register 1
+output_data_sr2           = $2a ;1 byte, data to be sent to shift register 2
+shift_data_tmp            = $2b ;1 byte, tmp var for shift data subroutine
+display_flags             = $2c ;1 byte, flags used in display routines
+mon_mem_lo                = $2d ;1 byte, lo byte location used by the memory monitor
+mon_mem_hi                = $2e ;1 byte, hi byte location used by the memory monitor
+hexit                     = $2f ;1 byte hex digit used for input parsing
+mon_tmp_lo                = $30 ;1 byte, used by the memory monitor as a read/write address
+mon_tmp_hi                = $31 ;1 byte
+start_index               = $32 ;1 byte, used by command line parsing
+end_index                 = $33 ;1 byte, used by command line parsing
+hex_found                 = $34 ;1 byte, used by command line parsing
 
-kb_buf = $0200 ;256 byte kb buffer 0200-02ff
-
-decimal_value     = $0300 ;2 bytes, for use with printing numbers
-decimal_mod10     = $0302 ;2 bytes, for use with printing numbers
-decimal_value_buf = $0304 ;6 bytes, buf to hold number for printing
-hexit             = $030a ;1 byte hex digit used for input parsing
-mon_tmp_lo        = $030b ;1 byte, used by the memory monitor as a read/write address
-mon_tmp_hi        = $030c ;1 byte
-start_index       = $030d ;1 byte, used by command line parsing
-end_index         = $030e ;1 byte, used by command line parsing
-hex_found         = $030f ;1 byte, used by command line parsing
+kb_buf          = $0200 ;256 byte kb buffer 0200-02ff
+xmodem_rcv_buf  = $0300 ;128 byte xmodem receive buffer
+xmodem_send_buf = $0380 ;128 byte xmodem send buffer
 
 SCREEN_BUF_NUM_ROWS    = 18    ;0 bytes, number of rows in the screen buffer
 SCREEN_BUF_ADDR_LO     = $00   ;0 bytes, address of screen buffer first row, lo byte
@@ -148,7 +149,6 @@ SCREEN_BUF_ADDR_END_LO = $a8   ;0 bytes, address of screen buffer last row, lo b
 SCREEN_BUF_ADDR_END_HI = $06   ;0 bytes, address of screen buffer last row, hi byte
 INPUT_BUF_ADDR_LO      = $d0   ;0 bytes, address of input buffer, lo byte
 INPUT_BUF_ADDR_HI      = $06   ;0 bytes, address of input buffer, hi byte
-cmd_args_indices       = $06f8 ;16 bytes, indices of command line arguments in screen row, first arg is command
 CMD_LINE_MAX_ARGS      = 16    ;0 bytes, max number of command line args
 
 LCD_BTM_ROW_START_ADDR = $40       ;0 bytes, lcd address of row 0, start
@@ -157,6 +157,9 @@ LCD_TOP_ROW_START_ADDR = $00       ;0 bytes, lcd address of row 1, start
 LCD_TOP_ROW_END_ADDR   = $27       ;0 bytes, lcd address of row 1, end
 LCD_DISPF_NOSHIFT      = %00000001 ;0 bytes, don't shift display when moving or printing
 
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+; non-maskable interrupt handler
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 nmi:
   RTI
 
