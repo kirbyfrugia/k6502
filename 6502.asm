@@ -82,9 +82,15 @@ LCD_SCREEN_WIDTH = 16 ; number of chars on the lcd screen
 KBF_RELEASING     = %00000001 ; flag to ignore next scancode
 KBF_LSHIFT        = %00000010 ; left shift key pressed
 KBF_RSHIFT        = %00000100 ; right shift key pressed
+KBF_CTRL          = %00001000 ; right shift key pressed
+KBF_CEQ           = %00010000 ; right shift key pressed
+KBF_RUNSTOP       = %00100000 ; right shift key pressed
 KBF_RELEASING_INV = %11111110 ; flag to ignore next scancode, inverse
 KBF_LSHIFT_INV    = %11111101 ; left shift key pressed, inverse
 KBF_RSHIFT_INV    = %11111011 ; right shift key pressed, inverse
+KBF_CTRL_INV      = %11110111 ; right shift key pressed, inverse
+KBF_CEQ_INV       = %11101111 ; right shift key pressed, inverse
+KBF_RUNSTOP_INV   = %11011111 ; right shift key pressed, inverse
 
 ; keyboard scancodes
 KBSC_RELEASE    = $f0 ; keyboard scancode - release
@@ -149,7 +155,6 @@ SCREEN_BUF_ADDR_END_LO = $a8   ;0 bytes, address of screen buffer last row, lo b
 SCREEN_BUF_ADDR_END_HI = $06   ;0 bytes, address of screen buffer last row, hi byte
 INPUT_BUF_ADDR_LO      = $d0   ;0 bytes, address of input buffer, lo byte
 INPUT_BUF_ADDR_HI      = $06   ;0 bytes, address of input buffer, hi byte
-CMD_LINE_MAX_ARGS      = 16    ;0 bytes, max number of command line args
 
 LCD_BTM_ROW_START_ADDR = $40       ;0 bytes, lcd address of row 0, start
 LCD_BTM_ROW_END_ADDR   = $67       ;0 bytes, lcd address of row 0, end
@@ -1170,12 +1175,6 @@ handle_mon_mem:
   TYA
   PHA
 
-  ; get the address we're going to read or write from
-  JSR get_next_arg
-  LDY start_index
-  CPY #$ff
-  BEQ handle_mon_mem_syntax_error
-
   JSR parse_hex
   LDA hex_found
   BNE handle_mon_mem_syntax_error ; wasn't a hex value
@@ -1310,13 +1309,73 @@ exec_cmd:
 
   LDY start_index
   CPY #$ff
-  BEQ exec_cmd_done ; no command
+  BNE exec_cmd_process
 
+  JMP exec_cmd_done
+exec_cmd_process:
   LDA (input_buf_lo), y
+  CMP #'T'
+  BEQ exec_cmd_T
+  CMP #'t'
+  BEQ exec_cmd_T
+  CMP #'R'
+  BEQ exec_cmd_R
+  CMP #'r'
+  BEQ exec_cmd_R
   CMP #'$'
   BEQ exec_cmd_DOLLAR
 
   JMP exec_cmd_unknown
+exec_cmd_T:
+  INC start_index
+  JSR get_next_arg
+  LDY start_index
+  CPY #$ff
+  BNE exec_cmd_T_next
+  JMP exec_cmd_unknown
+exec_cmd_T_next:
+  LDA (input_buf_lo),y
+  CMP #'X'
+  BEQ exec_cmd_TX
+  CMP #'x'
+  BEQ exec_cmd_TX
+  JMP exec_cmd_unknown
+exec_cmd_TX:
+  JMP exec_cmd_done
+exec_cmd_R:
+  INC start_index
+  JSR get_next_arg
+  LDY start_index
+  CPY #$ff
+  BNE exec_cmd_R_next
+  JMP exec_cmd_unknown
+exec_cmd_R_next:
+  LDA (input_buf_lo),y
+  CMP #'X'
+  BEQ exec_cmd_RX
+  CMP #'x'
+  BEQ exec_cmd_RX
+  JMP exec_cmd_unknown
+exec_cmd_RX:
+  INC start_index
+  JSR get_next_arg
+  LDY start_index
+  CPY #$ff
+  BEQ exec_cmd_syntax_error
+
+  JSR parse_hex
+  LDA hex_found
+  BNE exec_cmd_syntax_error
+
+  ; starting address to read or write from
+  LDA mon_tmp_lo
+  STA mon_mem_lo
+  LDA mon_tmp_hi
+  STA mon_mem_hi
+
+  JSR xmodem_rcv
+ 
+  JMP exec_cmd_done
 exec_cmd_DOLLAR:
   INC start_index
   JSR get_next_arg
@@ -1352,6 +1411,7 @@ exec_cmd_syntax_error:
   JMP exec_cmd_done
 exec_cmd_unknown:
   JSR add_screen_buf_row
+  LDY #0
   LDX #0
 exec_cmd_unknown_loop:
   LDA STR_UNKNOWN_CMD,x
@@ -1438,29 +1498,114 @@ runstop:
 ; rs232 send
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 tx_data_rs232:
-  PHA
   STA acia_data
   ; workaround ACIA hw bug where we can't trust tx status
   ; 520us works for 19200
   JSR sleep_520us
-  PLA
   RTS
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ; rs232 rcv
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-rx_data:
+rx_data_rs232:
   PHA
   LDA acia_status
   AND #%00001000 ; rx buffer full
-  BEQ rx_data_done
+  BEQ rx_data_rs232_done
 
   LDA acia_data
   STA ascii_char_typed
   JSR cursor_row_store_char
   JSR cursor_row_print_char
 
-rx_data_done:
+rx_data_rs232_done:
+  PLA
+  RTS
+
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+; receives a file over rs232 using the xmodem protocol
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+xmodem_rcv:
+  PHA
+  TXA
+  PHA
+  LDA zbb1
+  PHA
+  LDA zbb2
+  PHA
+
+  LDA #$00
+  STA acia_status ; soft reset
+xmodem_rcv_init_transfer:
+  ; send NAK to start transfer
+  LDA #XMODEM_NAK
+  STA acia_data
+  JSR sleep_520us
+
+  LDA #'.'
+  STA ascii_char_typed
+  JSR cursor_row_store_char
+  JSR cursor_row_print_char
+
+  ; wait up to 10 seconds to receive first packet
+  ; 50ms timer -> 20 times for a second * 10 seconds
+  LDX #200
+xmodem_rcv_next_packet:
+  LDA kb_flags_i
+  AND #KBF_RUNSTOP
+  BNE xmodem_rcv_runstop
+  
+  LDA acia_status
+  AND #%00001000 ; rx buffer full
+  BNE xmodem_rcv_packet ; we have data
+
+  ; if here, no data received, see if 50ms timer expired
+  LDA via1_ifr
+  AND #%00100000
+  BEQ xmodem_rcv_next_packet ; timer hasn't elapsed, await packet
+
+  ; if here, 50ms timer expired
+  LDA #'X'
+  STA ascii_char_typed
+  JSR cursor_row_store_char
+  JSR cursor_row_print_char
+  JMP xmodem_rcv_done
+
+  ; restart timer, 50ms - 22us for sleep
+  LDA #$3a
+  STA via1_t2cl
+  LDA #$c3
+  STA via1_t2ch
+
+  DEX
+  BNE xmodem_rcv_next_packet   ; < 10 seconds, just wait longer
+  BEQ xmodem_rcv_init_transfer ; 10 seconds have elapsed, restart
+xmodem_rcv_packet:
+  LDA #'!'
+  STA ascii_char_typed
+  JSR cursor_row_store_char
+  JSR cursor_row_print_char
+  JMP xmodem_rcv_done
+xmodem_rcv_timeout:
+  LDA #'T'
+  STA ascii_char_typed
+  JSR cursor_row_store_char
+  JSR cursor_row_print_char
+  JMP xmodem_rcv_done
+xmodem_rcv_runstop:
+  LDA #'A'
+  STA ascii_char_typed
+  JSR cursor_row_store_char
+  JSR cursor_row_print_char
+  JMP xmodem_rcv_done
+xmodem_rcv_done:
+  PLA
+  STA zbb2
+  PLA
+  STA zbb1
+  PLA
+  TAX
   PLA
   RTS
 
